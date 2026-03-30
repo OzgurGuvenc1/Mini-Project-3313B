@@ -14,6 +14,10 @@ struct proc *initproc;
 
 int nextpid = 1;
 struct spinlock pid_lock;
+static struct spinlock energy_lock;
+static uint64 energy_total_ticks;
+static uint64 energy_busy_ticks;
+static volatile int high_load;
 
 extern void forkret(void);
 static void freeproc(struct proc *p);
@@ -51,6 +55,7 @@ procinit(void)
   
   initlock(&pid_lock, "nextpid");
   initlock(&wait_lock, "wait_lock");
+  initlock(&energy_lock, "energy");
   for(p = proc; p < &proc[NPROC]; p++) {
       initlock(&p->lock, "proc");
       p->state = UNUSED;
@@ -168,6 +173,9 @@ freeproc(struct proc *p)
   p->chan = 0;
   p->killed = 0;
   p->xstate = 0;
+  p->runtime_ticks = 0;
+  p->throttle_limit = 0;
+  p->throttle_until = 0;
   p->state = UNUSED;
 }
 
@@ -437,26 +445,43 @@ scheduler(void)
     intr_on();
     intr_off();
 
-    int found = 0;
+    int runnable = 0;
+    uint64 now = current_ticks();
+    struct proc *chosen = 0;
+
     for(p = proc; p < &proc[NPROC]; p++) {
       acquire(&p->lock);
       if(p->state == RUNNABLE) {
-        // Switch to chosen process.  It is the process's job
-        // to release its lock and then reacquire it
-        // before jumping back to us.
-        p->state = RUNNING;
-        c->proc = p;
-        swtch(&c->context, &p->context);
-
-        // Process is done running for now.
-        // It should have changed its p->state before coming back.
-        c->proc = 0;
-        found = 1;
+        runnable++;
+        if(p->throttle_limit > 0 && p->throttle_until > now) {
+          release(&p->lock);
+          continue;
+        }
+        if(chosen == 0 ||
+           p->runtime_ticks < chosen->runtime_ticks ||
+           (p->runtime_ticks == chosen->runtime_ticks && p->pid < chosen->pid)) {
+          if(chosen)
+            release(&chosen->lock);
+          chosen = p;
+          continue;
+        }
       }
       release(&p->lock);
     }
-    if(found == 0) {
-      // nothing to run; stop running on this core until an interrupt.
+
+    high_load = (runnable > NCPU);
+
+    if(chosen) {
+      // Switch to the lightest runnable process first.
+      chosen->state = RUNNING;
+      c->proc = chosen;
+      swtch(&c->context, &chosen->context);
+
+      // Process is done running for now.
+      c->proc = 0;
+      release(&chosen->lock);
+    } else {
+      intr_on();
       asm volatile("wfi");
     }
   }
@@ -657,6 +682,68 @@ either_copyin(void *dst, int user_src, uint64 src, uint64 len)
     memmove(dst, (char*)src, len);
     return 0;
   }
+}
+
+void
+record_system_tick(int busy)
+{
+  acquire(&energy_lock);
+  energy_total_ticks++;
+  if(busy)
+    energy_busy_ticks++;
+  release(&energy_lock);
+}
+
+void
+record_process_tick(struct proc *p)
+{
+  uint64 now;
+
+  if(p == 0)
+    return;
+
+  p->runtime_ticks++;
+  if(p->throttle_limit <= 0 || !high_load)
+    return;
+
+  now = current_ticks();
+  p->throttle_until = now + p->throttle_limit;
+}
+
+uint64
+uptime_energy(void)
+{
+  uint64 total;
+  uint64 busy;
+
+  acquire(&energy_lock);
+  total = energy_total_ticks;
+  busy = energy_busy_ticks;
+  release(&energy_lock);
+
+  if(total == 0)
+    return 0;
+  return (busy * 100) / total;
+}
+
+int
+kthrottle(int pid, int limit)
+{
+  struct proc *p;
+
+  for(p = proc; p < &proc[NPROC]; p++){
+    acquire(&p->lock);
+    if(p->pid == pid && p->state != UNUSED){
+      p->throttle_limit = limit;
+      if(limit <= 0)
+        p->throttle_until = 0;
+      release(&p->lock);
+      return 0;
+    }
+    release(&p->lock);
+  }
+
+  return -1;
 }
 
 // Print a process listing to console.  For debugging.

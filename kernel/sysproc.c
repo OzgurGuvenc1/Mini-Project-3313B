@@ -17,6 +17,25 @@ sys_exit(void)
 }
 
 uint64
+sys_uptime_energy(void)
+{
+  return uptime_energy();
+}
+
+uint64
+sys_throttle(void)
+{
+  int pid;
+  int limit;
+
+  argint(0, &pid);
+  argint(1, &limit);
+  if(limit < 0)
+    return -1;
+  return kthrottle(pid, limit);
+}
+
+uint64
 sys_getpid(void)
 {
   return myproc()->pid;

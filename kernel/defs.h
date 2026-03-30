@@ -93,7 +93,11 @@ struct proc*    myproc();
 void            procinit(void);
 void            scheduler(void) __attribute__((noreturn));
 void            sched(void);
+void            record_process_tick(struct proc *);
+void            record_system_tick(int);
 void            sleep(void*, struct spinlock*);
+int             kthrottle(int, int);
+uint64          uptime_energy(void);
 void            userinit(void);
 int             kwait(uint64);
 void            wakeup(void*);
@@ -142,6 +146,7 @@ void            trapinit(void);
 void            trapinithart(void);
 extern struct spinlock tickslock;
 void            prepare_return(void);
+uint64          current_ticks(void);
 
 // uart.c
 void            uartinit(void);

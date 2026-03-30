@@ -22,6 +22,17 @@ trapinit(void)
   initlock(&tickslock, "time");
 }
 
+uint64
+current_ticks(void)
+{
+  uint64 now;
+
+  acquire(&tickslock);
+  now = ticks;
+  release(&tickslock);
+  return now;
+}
+
 // set up to take exceptions and traps while in the kernel.
 void
 trapinithart(void)
@@ -81,8 +92,11 @@ usertrap(void)
     kexit(-1);
 
   // give up the CPU if this is a timer interrupt.
-  if(which_dev == 2)
+  if(which_dev == 2) {
+    record_system_tick(1);
+    record_process_tick(p);
     yield();
+  }
 
   prepare_return();
 
@@ -152,6 +166,11 @@ kerneltrap()
   }
 
   // give up the CPU if this is a timer interrupt.
+  if(which_dev == 2){
+    record_system_tick(myproc() != 0);
+    record_process_tick(myproc());
+  }
+
   if(which_dev == 2 && myproc() != 0)
     yield();
 
@@ -216,4 +235,3 @@ devintr()
     return 0;
   }
 }
-
