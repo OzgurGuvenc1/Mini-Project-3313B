@@ -26,6 +26,7 @@ int pause(int);
 int uptime(void);
 int uptime_energy(void);
 int throttle(int, int);
+int getprocload(void);
 
 // ulib.c
 int stat(const char*, struct stat*);
