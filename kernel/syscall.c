@@ -103,7 +103,6 @@ extern uint64 sys_mkdir(void);
 extern uint64 sys_close(void);
 extern uint64 sys_uptime_energy(void);
 extern uint64 sys_throttle(void);
-extern uint64 sys_getprocload(void);
 
 // An array mapping syscall numbers from syscall.h
 // to the function that handles the system call.
@@ -131,7 +130,6 @@ static uint64 (*syscalls[])(void) = {
 [SYS_close]   sys_close,
 [SYS_uptime_energy] sys_uptime_energy,
 [SYS_throttle] sys_throttle,
-[SYS_getprocload] sys_getprocload,
 };
 
 void
