@@ -22,4 +22,3 @@
 #define SYS_close  21
 #define SYS_uptime_energy 22
 #define SYS_throttle 23
-#define SYS_getprocload 24

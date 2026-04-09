@@ -44,4 +44,3 @@ entry("pause");
 entry("uptime");
 entry("uptime_energy");
 entry("throttle");
-entry("getprocload");
